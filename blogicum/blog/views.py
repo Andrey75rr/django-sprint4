@@ -15,12 +15,14 @@ from blog.models import Category, Post, Comment
 
 POSTS_LIMIT = 5
 User = get_user_model()
+
 POSTS_PER_PAGE = 10
 
 
 def get_published_posts():
-    """Получение опубликованных постов с фильтрацией"""
-
+    """
+    Получение опубликованных постов с фильтрацией
+    """
     current_time = timezone.now()
     return Post.objects.filter(
         is_published=True,
@@ -151,13 +153,11 @@ class PostCreateView(LoginRequiredMixin, CreateView):
 
     def form_valid(self, form):
         """Привязка автора к текущему пользователю"""
-
         form.instance.author = self.request.user
         return super().form_valid(form)
 
     def get_success_url(self):
         """Перенаправление в профиль пользователя после создания"""
-
         return reverse_lazy(
             'blog:profile',
             kwargs={'username': self.request.user.username}
@@ -174,7 +174,6 @@ class PostUpdateView(LoginRequiredMixin, UpdateView):
 
     def dispatch(self, request, *args, **kwargs):
         """Проверка прав на редактирование поста"""
-
         obj = self.get_object()
         if obj.author != request.user:
             return redirect('blog:post_detail', post_id=obj.id)
@@ -182,7 +181,6 @@ class PostUpdateView(LoginRequiredMixin, UpdateView):
 
     def get_success_url(self):
         """Перенаправление на страницу поста после редактирования"""
-
         return reverse_lazy('blog:post_detail', kwargs={
             'post_id': self.object.id})
 
