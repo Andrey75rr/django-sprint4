@@ -20,9 +20,7 @@ POSTS_PER_PAGE = 10
 
 
 def get_published_posts():
-    """
-    Получение опубликованных постов с фильтрацией
-    """
+    """Получение опубликованных постов с фильтрацией."""
     current_time = timezone.now()
     return Post.objects.filter(
         is_published=True,

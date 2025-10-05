@@ -16,9 +16,11 @@ def server_error(request):
 
 class AboutView(TemplateView):
     """Страница о проекте"""
+
     template_name = 'pages/about.html'
 
 
 class RulesView(TemplateView):
     """Страница наши правила"""
+
     template_name = 'pages/rules.html'
