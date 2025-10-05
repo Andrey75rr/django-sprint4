@@ -20,6 +20,7 @@ POSTS_PER_PAGE = 10
 
 def get_published_posts():
     """Получение опубликованных постов с фильтрацией"""
+
     current_time = timezone.now()
     return Post.objects.filter(
         is_published=True,
@@ -122,6 +123,7 @@ def user_profile(request, username):
 
 class UserRegistrationView(CreateView):
     """Регистрация нового пользователя"""
+
     model = User
     form_class = UserCreationForm
     template_name = 'registration/registration_form.html'
@@ -130,6 +132,7 @@ class UserRegistrationView(CreateView):
 
 class UserUpdateView(LoginRequiredMixin, UpdateView):
     """Редактирование профиля пользователя"""
+
     model = User
     form_class = UserChangeForm
     template_name = 'registration/edit_profile.html'
@@ -141,17 +144,20 @@ class UserUpdateView(LoginRequiredMixin, UpdateView):
 
 class PostCreateView(LoginRequiredMixin, CreateView):
     """Создание нового поста"""
+
     model = Post
     template_name = 'blog/create.html'
     fields = ['title', 'text', 'image', 'pub_date', 'location', 'category']
 
     def form_valid(self, form):
         """Привязка автора к текущему пользователю"""
+
         form.instance.author = self.request.user
         return super().form_valid(form)
 
     def get_success_url(self):
         """Перенаправление в профиль пользователя после создания"""
+
         return reverse_lazy(
             'blog:profile',
             kwargs={'username': self.request.user.username}
@@ -160,6 +166,7 @@ class PostCreateView(LoginRequiredMixin, CreateView):
 
 class PostUpdateView(LoginRequiredMixin, UpdateView):
     """Редактирование существующего поста"""
+
     model = Post
     template_name = 'blog/create.html'
     fields = ['title', 'text', 'image', 'pub_date', 'location', 'category']
@@ -167,6 +174,7 @@ class PostUpdateView(LoginRequiredMixin, UpdateView):
 
     def dispatch(self, request, *args, **kwargs):
         """Проверка прав на редактирование поста"""
+
         obj = self.get_object()
         if obj.author != request.user:
             return redirect('blog:post_detail', post_id=obj.id)
@@ -174,12 +182,14 @@ class PostUpdateView(LoginRequiredMixin, UpdateView):
 
     def get_success_url(self):
         """Перенаправление на страницу поста после редактирования"""
+
         return reverse_lazy('blog:post_detail', kwargs={
             'post_id': self.object.id})
 
 
 class PostDeleteView(LoginRequiredMixin, DeleteView):
     """Удаление поста"""
+
     model = Post
     template_name = 'blog/detail.html'
     pk_url_kwarg = 'post_id'
@@ -199,6 +209,7 @@ class PostDeleteView(LoginRequiredMixin, DeleteView):
 
 class CommentCreateView(LoginRequiredMixin, CreateView):
     """Создание комментария"""
+
     model = Comment
     fields = ['text']
 
@@ -226,6 +237,7 @@ class CommentCreateView(LoginRequiredMixin, CreateView):
 
 class CommentUpdateView(LoginRequiredMixin, UpdateView):
     """Редактирование комментария"""
+
     model = Comment
     template_name = 'blog/comment.html'
     fields = ['text']
@@ -246,6 +258,7 @@ class CommentUpdateView(LoginRequiredMixin, UpdateView):
 
 class CommentDeleteView(LoginRequiredMixin, DeleteView):
     """Удаление комментария"""
+
     model = Comment
     template_name = 'blog/comment.html'
     pk_url_kwarg = 'comment_id'
