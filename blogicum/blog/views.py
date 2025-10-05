@@ -20,6 +20,7 @@ POSTS_PER_PAGE = 10
 
 def get_published_posts():
     """Получение опубликованных постов с фильтрацией"""
+
     current_time = timezone.now()
     return Post.objects.filter(
         is_published=True,
@@ -122,6 +123,7 @@ def user_profile(request, username):
 
 class UserRegistrationView(CreateView):
     """Регистрация нового пользователя"""
+
     model = User
     form_class = UserCreationForm
     template_name = 'registration/registration_form.html'
@@ -140,17 +142,20 @@ class UserUpdateView(LoginRequiredMixin, UpdateView):
 
 class PostCreateView(LoginRequiredMixin, CreateView):
     """Создание нового поста"""
+
     model = Post
     template_name = 'blog/create.html'
     fields = ['title', 'text', 'image', 'pub_date', 'location', 'category']
 
     def form_valid(self, form):
         """Привязка автора к текущему пользователю"""
+
         form.instance.author = self.request.user
         return super().form_valid(form)
 
     def get_success_url(self):
         """Перенаправление в профиль пользователя после создания"""
+
         return reverse_lazy(
             'blog:profile',
             kwargs={'username': self.request.user.username}
@@ -159,6 +164,7 @@ class PostCreateView(LoginRequiredMixin, CreateView):
 
 class PostUpdateView(LoginRequiredMixin, UpdateView):
     """Редактирование существующего поста"""
+
     model = Post
     template_name = 'blog/create.html'
     fields = ['title', 'text', 'image', 'pub_date', 'location', 'category']

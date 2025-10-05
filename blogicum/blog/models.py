@@ -96,6 +96,7 @@ class Post(PublishedModel):
     def __str__(self):
         return self.title
 
+
 class Comment(models.Model):
     text = models.TextField('Текст комментария')
     post = models.ForeignKey(
@@ -108,7 +109,7 @@ class Comment(models.Model):
         on_delete=models.CASCADE,
     )
     created_at = models.DateTimeField(auto_now_add=True)
-    
+
     class Meta:
         ordering = ['created_at']
         verbose_name = 'комментарий'
