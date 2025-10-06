@@ -1,16 +1,17 @@
+from django import forms
 from django.contrib.auth import get_user_model
 from django.contrib.auth.forms import UserCreationForm, UserChangeForm
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.core.paginator import Paginator
-from django.shortcuts import get_object_or_404, render, redirect
-from django.urls import reverse_lazy
-from django.utils import timezone
-from django.http import HttpResponseForbidden
-from django.views.generic import CreateView, DeleteView, UpdateView
 from django.db.models import Count
-from django import forms
+from django.http import Http404, HttpResponseForbidden
+from django.shortcuts import get_object_or_404, redirect, render
+from django.urls import reverse, reverse_lazy
+from django.utils import timezone
+from django.views.generic import CreateView, DeleteView, UpdateView
 
-from blog.models import Category, Post, Comment
+from blog.models import Category, Comment, Post
+from .forms import CommentForm
 
 
 POSTS_LIMIT = 5
@@ -31,11 +32,16 @@ def get_published_posts():
     ).order_by('-pub_date')
 
 
-def index(request):
-    post_list = get_published_posts()
+def get_paginator(request, post_list):
+    """Пагинация для списка постов."""
     paginator = Paginator(post_list, POSTS_PER_PAGE)
     page_number = request.GET.get('page')
-    page_obj = paginator.get_page(page_number)
+    return paginator.get_page(page_number)
+
+
+def index(request):
+    post_list = get_published_posts()
+    page_obj = get_paginator(request, post_list)
     context = {'page_obj': page_obj}
     return render(request, 'blog/index.html', context)
 
@@ -47,9 +53,7 @@ def category_posts(request, category_slug):
         is_published=True
     )
     post_list = get_published_posts().filter(category=category)
-    paginator = Paginator(post_list, POSTS_PER_PAGE)
-    page_number = request.GET.get('page')
-    page_obj = paginator.get_page(page_number)
+    page_obj = get_paginator(request, post_list)
     context = {
         'category': category,
         'page_obj': page_obj
@@ -59,31 +63,17 @@ def category_posts(request, category_slug):
 
 def post_detail(request, post_id):
     current_time = timezone.now()
-    # Сначала получаем пост без фильтров
     post = get_object_or_404(Post, id=post_id)
-    # Проверяем права доступа
     if not post.is_published or (
             post.pub_date > current_time
             or not post.category.is_published):
-        # Если пост не опубликован, проверяем, является ли пользователь автором
         if request.user != post.author:
-            return render(request, 'pages/404.html', status=404)
+            raise Http404("Пост не найден")
     comments = post.comments.all().order_by('created_at')
-    # Добавляем форму для комментариев
     if request.user.is_authenticated:
-        class CommentForm(forms.Form):
-            text = forms.CharField(
-                widget=forms.Textarea(attrs={
-                    'class': 'form-control',
-                    'rows': 3,
-                    'placeholder': 'Введите ваш комментарий'
-                }),
-                label='Комментарий'
-            )
         form = CommentForm()
     else:
         form = None
-
     context = {
         'post': post,
         'comments': comments,
@@ -96,23 +86,13 @@ def user_profile(request, username):
     user = get_object_or_404(User, username=username)
 
     if request.user == user:
-        # Автор видит все свои посты
         post_list = Post.objects.filter(author=user).annotate(
             comment_count=Count('comments')
         ).order_by('-pub_date')
     else:
-        # Другие видят только опубликованные
-        current_time = timezone.now()
-        post_list = Post.objects.filter(
-            author=user,
-            is_published=True,
-            pub_date__lte=current_time,
-            category__is_published=True
-        ).annotate(comment_count=Count('comments')).order_by('-pub_date')
+        post_list = get_published_posts().filter(author=user)
 
-    paginator = Paginator(post_list, POSTS_PER_PAGE)
-    page_number = request.GET.get('page')
-    page_obj = paginator.get_page(page_number)
+    page_obj = get_paginator(request, post_list)
     context = {
         'profile': user,
         'page_obj': page_obj,
@@ -156,7 +136,7 @@ class PostCreateView(LoginRequiredMixin, CreateView):
 
     def get_success_url(self):
         """Перенаправление в профиль пользователя после создания"""
-        return reverse_lazy(
+        return reverse(
             'blog:profile',
             kwargs={'username': self.request.user.username}
         )
@@ -179,7 +159,7 @@ class PostUpdateView(LoginRequiredMixin, UpdateView):
 
     def get_success_url(self):
         """Перенаправление на страницу поста после редактирования"""
-        return reverse_lazy('blog:post_detail', kwargs={
+        return reverse('blog:post_detail', kwargs={
             'post_id': self.object.id})
 
 
@@ -197,13 +177,26 @@ class PostDeleteView(LoginRequiredMixin, DeleteView):
         return super().dispatch(request, *args, **kwargs)
 
     def get_success_url(self):
-        return reverse_lazy(
+        return reverse(
             'blog:profile',
             kwargs={'username': self.request.user.username}
         )
 
 
-class CommentCreateView(LoginRequiredMixin, CreateView):
+class CommentSuccessUrlMixin:
+
+    def get_success_url(self):
+        return reverse(
+            'blog:post_detail',
+            kwargs={'post_id': self.kwargs['post_id']}
+        )
+
+
+class CommentCreateView(
+    LoginRequiredMixin,
+    CommentSuccessUrlMixin,
+    CreateView
+):
     """Создание комментария"""
 
     model = Comment
@@ -211,9 +204,7 @@ class CommentCreateView(LoginRequiredMixin, CreateView):
 
     def dispatch(self, request, *args, **kwargs):
         # Проверяем, существует ли пост
-        from django.http import Http404
         try:
-            # Убираем присвоение переменной, так как она не используется
             Post.objects.get(id=self.kwargs['post_id'])
         except Post.DoesNotExist:
             raise Http404("Пост не найден")
@@ -224,14 +215,12 @@ class CommentCreateView(LoginRequiredMixin, CreateView):
         form.instance.post_id = self.kwargs['post_id']
         return super().form_valid(form)
 
-    def get_success_url(self):
-        return reverse_lazy(
-            'blog:post_detail',
-            kwargs={'post_id': self.kwargs['post_id']}
-        )
 
-
-class CommentUpdateView(LoginRequiredMixin, UpdateView):
+class CommentUpdateView(
+    LoginRequiredMixin,
+    CommentSuccessUrlMixin,
+    UpdateView
+):
     """Редактирование комментария"""
 
     model = Comment
@@ -245,14 +234,12 @@ class CommentUpdateView(LoginRequiredMixin, UpdateView):
             return HttpResponseForbidden()
         return super().dispatch(request, *args, **kwargs)
 
-    def get_success_url(self):
-        return reverse_lazy(
-            'blog:post_detail',
-            kwargs={'post_id': self.kwargs['post_id']}
-        )
 
-
-class CommentDeleteView(LoginRequiredMixin, DeleteView):
+class CommentDeleteView(
+    LoginRequiredMixin,
+    CommentSuccessUrlMixin,
+    DeleteView
+):
     """Удаление комментария"""
 
     model = Comment
@@ -264,12 +251,6 @@ class CommentDeleteView(LoginRequiredMixin, DeleteView):
         if obj.author != request.user:
             return HttpResponseForbidden()
         return super().dispatch(request, *args, **kwargs)
-
-    def get_success_url(self):
-        return reverse_lazy(
-            'blog:post_detail',
-            kwargs={'post_id': self.kwargs['post_id']}
-        )
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
