@@ -4,7 +4,7 @@ from django.contrib.auth.forms import UserCreationForm, UserChangeForm
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.core.paginator import Paginator
 from django.db.models import Count
-from django.http import Http404, HttpResponseForbidden
+from django.http import Http404
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse, reverse_lazy
 from django.utils import timezone
@@ -12,6 +12,8 @@ from django.views.generic import CreateView, DeleteView, UpdateView
 
 from blog.models import Category, Comment, Post
 from .forms import CommentForm
+from .mixins import CommentSuccessUrlMixin, PostSuccessUrlMixin
+from .mixins import AuthorRequiredMixin
 
 
 POSTS_LIMIT = 5
@@ -68,7 +70,7 @@ def post_detail(request, post_id):
             post.pub_date > current_time
             or not post.category.is_published):
         if request.user != post.author:
-            raise Http404("Пост не найден")
+            raise Http404('Пост не найден')
     comments = post.comments.all().order_by('created_at')
     if request.user.is_authenticated:
         form = CommentForm()
@@ -122,7 +124,7 @@ class UserUpdateView(LoginRequiredMixin, UpdateView):
         return self.request.user
 
 
-class PostCreateView(LoginRequiredMixin, CreateView):
+class PostCreateView(LoginRequiredMixin, PostSuccessUrlMixin, CreateView):
     """Создание нового поста"""
 
     model = Post
@@ -133,13 +135,6 @@ class PostCreateView(LoginRequiredMixin, CreateView):
         """Привязка автора к текущему пользователю"""
         form.instance.author = self.request.user
         return super().form_valid(form)
-
-    def get_success_url(self):
-        """Перенаправление в профиль пользователя после создания"""
-        return reverse(
-            'blog:profile',
-            kwargs={'username': self.request.user.username}
-        )
 
 
 class PostUpdateView(LoginRequiredMixin, UpdateView):
@@ -163,33 +158,17 @@ class PostUpdateView(LoginRequiredMixin, UpdateView):
             'post_id': self.object.id})
 
 
-class PostDeleteView(LoginRequiredMixin, DeleteView):
+class PostDeleteView(
+    LoginRequiredMixin,
+    PostSuccessUrlMixin,
+    AuthorRequiredMixin,
+    DeleteView
+):
     """Удаление поста"""
 
     model = Post
     template_name = 'blog/detail.html'
     pk_url_kwarg = 'post_id'
-
-    def dispatch(self, request, *args, **kwargs):
-        obj = self.get_object()
-        if obj.author != request.user:
-            return HttpResponseForbidden()
-        return super().dispatch(request, *args, **kwargs)
-
-    def get_success_url(self):
-        return reverse(
-            'blog:profile',
-            kwargs={'username': self.request.user.username}
-        )
-
-
-class CommentSuccessUrlMixin:
-
-    def get_success_url(self):
-        return reverse(
-            'blog:post_detail',
-            kwargs={'post_id': self.kwargs['post_id']}
-        )
 
 
 class CommentCreateView(
@@ -203,11 +182,7 @@ class CommentCreateView(
     fields = ['text']
 
     def dispatch(self, request, *args, **kwargs):
-        # Проверяем, существует ли пост
-        try:
-            Post.objects.get(id=self.kwargs['post_id'])
-        except Post.DoesNotExist:
-            raise Http404("Пост не найден")
+        get_object_or_404(Post, id=self.kwargs['post_id'])
         return super().dispatch(request, *args, **kwargs)
 
     def form_valid(self, form):
@@ -219,6 +194,7 @@ class CommentCreateView(
 class CommentUpdateView(
     LoginRequiredMixin,
     CommentSuccessUrlMixin,
+    AuthorRequiredMixin,
     UpdateView
 ):
     """Редактирование комментария"""
@@ -228,16 +204,11 @@ class CommentUpdateView(
     fields = ['text']
     pk_url_kwarg = 'comment_id'
 
-    def dispatch(self, request, *args, **kwargs):
-        obj = self.get_object()
-        if obj.author != request.user:
-            return HttpResponseForbidden()
-        return super().dispatch(request, *args, **kwargs)
-
 
 class CommentDeleteView(
     LoginRequiredMixin,
     CommentSuccessUrlMixin,
+    AuthorRequiredMixin,
     DeleteView
 ):
     """Удаление комментария"""
@@ -245,12 +216,6 @@ class CommentDeleteView(
     model = Comment
     template_name = 'blog/comment.html'
     pk_url_kwarg = 'comment_id'
-
-    def dispatch(self, request, *args, **kwargs):
-        obj = self.get_object()
-        if obj.author != request.user:
-            return HttpResponseForbidden()
-        return super().dispatch(request, *args, **kwargs)
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
